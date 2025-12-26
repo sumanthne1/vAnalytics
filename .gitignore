@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dll
+*.dylib
+*.egg-info/
+.eggs/
+build/
+dist/
+venv/
+.env
+
+# Node / npm / yarn
+node_modules/
+.npm/
+.npm-cache/
+.mmdc/
+
+# Mac
+.DS_Store
+
+# Videos and large media
+*.mp4
+*.mov
+*.MOV
+*.avi
+*.mkv
+*.gif
+Input/
+Output/
+Output_Annotate/
+segments_output/
+latest-game_output/
+Scrimmage_output/
+Test_Video_output/
+Test_Fix_Output/
+Test_Fix_Output
+
+# Logs and caches
+*.log
+.cache/
+.debug/
+
+# Model weights / binaries
+*.pt
+*.onnx
+*.bin
+*.pb
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Others
+approved.signal
+

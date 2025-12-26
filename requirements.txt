@@ -1,0 +1,40 @@
+# Volleyball Analytics - Dependencies
+# Python 3.10+ required
+
+# Core ML/CV
+opencv-python>=4.8.0
+numpy>=1.24.0
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Object Detection
+ultralytics>=8.0.0
+
+# Pose Estimation
+mediapipe>=0.10.0
+
+# Tracking
+filterpy>=1.4.5  # For Kalman filter in ByteTrack
+lap>=0.4.0  # Linear assignment for tracking
+scipy>=1.11.0
+
+# Data handling
+pandas>=2.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Logging and CLI
+python-json-logger>=2.0.0
+click>=8.1.0
+rich>=13.0.0  # For progress bars and pretty output
+tqdm>=4.65.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Video download (for test data)
+yt-dlp>=2023.10.0
+
+# Web UI for human-in-the-loop
+flask>=2.3.0
