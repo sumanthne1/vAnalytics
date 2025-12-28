@@ -31,7 +31,8 @@ import cv2
 import numpy as np
 from flask import Flask, jsonify, render_template_string, request
 
-from ..detection_tracking.bytetrack import Track
+# Import Track compatibility class from bootstrap
+from .bootstrap import Track
 
 logger = logging.getLogger(__name__)
 
@@ -204,12 +205,13 @@ class WebReviewServer:
         print(f"🌐 Web UI is ready!")
         print(f"📱 Open in your browser: {url}")
         print("=" * 70)
-        print("\nInstructions:")
-        print("  • Click on players to TAG them (only tagged players will be tracked)")
-        print("  • Click 'Edit' button to change player labels")
-        print("  • Use Next/Previous to navigate frames")
+        print("\n🎯 SINGLE-PLAYER MODE:")
+        print("  • Tag the SAME player across MULTIPLE frames")
+        print("  • More samples = better accuracy (aim for 10+ tags)")
+        print("  • Click 'Edit' to set the player's name (e.g., 'Rithika')")
+        print("  • Navigate all 20 frames and tag your player in each")
         print("  • Click 'Confirm & Continue' when done")
-        print("\n⚠️  NOTHING is tagged by default. You MUST click to tag each player!\n")
+        print("\n⚠️  Tag ONE player in as MANY frames as possible!\n")
 
         # Try to open browser automatically
         try:
@@ -565,12 +567,12 @@ HTML_TEMPLATE = """
 
             <div class="sidebar">
                 <div class="instructions">
-                    <strong>📋 Instructions:</strong>
+                    <strong>🎯 Single-Player Mode:</strong>
                     <ul>
-                        <li><strong>Click on boxes</strong> to keep/ignore</li>
-                        <li><strong>Edit labels</strong> for player names</li>
-                        <li><strong>Navigate</strong> through all frames</li>
-                        <li><strong>Confirm</strong> when done</li>
+                        <li><strong>Tag the SAME player</strong> in multiple frames</li>
+                        <li><strong>More samples = better accuracy</strong></li>
+                        <li><strong>Edit label</strong> to set player name</li>
+                        <li><strong>Navigate all 20 frames</strong> to tag</li>
                     </ul>
                 </div>
 
@@ -661,22 +663,34 @@ HTML_TEMPLATE = """
                 const x2 = bbox.x2 * scaleX;
                 const y2 = bbox.y2 * scaleY;
 
-                // Color based on status
-                const color = track.is_kept ? '#48bb78' : '#f56565';
-                const lineWidth = track.is_kept ? 3 : 2;
+                if (track.is_kept) {
+                    // TAGGED: Full green box with large label
+                    ctx.strokeStyle = '#48bb78';
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
-                // Draw box
-                ctx.strokeStyle = color;
-                ctx.lineWidth = lineWidth;
-                ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                    // Large, prominent label for tagged players
+                    const label = `${track.label} ✓`;
+                    ctx.font = 'bold 16px sans-serif';
+                    const textWidth = ctx.measureText(label).width;
+                    ctx.fillStyle = '#48bb78';
+                    ctx.fillRect(x1, y1 - 28, textWidth + 12, 28);
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(label, x1 + 6, y1 - 8);
+                } else {
+                    // UNTAGGED: Minimal thin box, tiny dot indicator only
+                    ctx.strokeStyle = 'rgba(200, 200, 200, 0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([3, 3]);
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+                    ctx.setLineDash([]);
 
-                // Draw label
-                const label = `${track.label} (${track.is_kept ? 'KEPT' : 'IGNORED'})`;
-                ctx.fillStyle = color;
-                ctx.fillRect(x1, y1 - 25, ctx.measureText(label).width + 10, 25);
-                ctx.fillStyle = 'white';
-                ctx.font = '14px sans-serif';
-                ctx.fillText(label, x1 + 5, y1 - 7);
+                    // Tiny dot in corner instead of label (non-intrusive)
+                    ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
+                    ctx.beginPath();
+                    ctx.arc(x1 + 6, y1 + 6, 4, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
             });
         }
 

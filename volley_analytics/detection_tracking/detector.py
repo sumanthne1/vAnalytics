@@ -40,26 +40,44 @@ class PlayerDetector:
 
     def __init__(
         self,
-        model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.4,
+        model_name: str = "yolov8x.pt",
+        confidence_threshold: float = 0.35,
         iou_threshold: float = 0.45,
         device: str = "auto",
         max_detections: int = 20,
+        imgsz: int = 1920,  # Increased for better small player detection
+        enhance_contrast: bool = True,
+        clahe_clip_limit: float = 2.0,
+        clahe_grid_size: int = 8,
     ):
         """
         Initialize player detector.
 
         Args:
-            model_name: YOLO model name (yolov8n, yolov8s, yolov8m)
+            model_name: YOLO model name (yolov8n, yolov8s, yolov8m, yolov8l, yolov8x)
             confidence_threshold: Minimum detection confidence
             iou_threshold: NMS IoU threshold
             device: Device to run on (auto, cpu, cuda, mps)
             max_detections: Maximum detections to return
+            imgsz: Input image size for YOLO (higher = better for small players)
+            enhance_contrast: Enable CLAHE contrast enhancement
+            clahe_clip_limit: CLAHE clip limit (1.0-4.0)
+            clahe_grid_size: CLAHE tile grid size
         """
         self.model_name = model_name
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
         self.max_detections = max_detections
+        self.imgsz = imgsz
+        self.enhance_contrast = enhance_contrast
+        self.clahe_clip_limit = clahe_clip_limit
+        self.clahe_grid_size = clahe_grid_size
+
+        # Initialize CLAHE
+        self._clahe = cv2.createCLAHE(
+            clipLimit=clahe_clip_limit,
+            tileGridSize=(clahe_grid_size, clahe_grid_size)
+        )
 
         # Determine device
         if device == "auto":
@@ -72,10 +90,37 @@ class PlayerDetector:
                 device = "cpu"
 
         self.device = device
-        logger.info(f"Loading YOLO model: {model_name} on {device}")
+        logger.info(f"Loading YOLO model: {model_name} on {device} (imgsz={imgsz})")
 
         self.model = YOLO(model_name)
         self.model.to(device)
+
+    def enhance_frame(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Apply CLAHE contrast enhancement to improve detection in shadows/poor lighting.
+
+        Converts to LAB color space, applies CLAHE to luminance channel only,
+        then converts back to BGR. This enhances contrast without affecting colors.
+
+        Args:
+            frame: BGR image (numpy array)
+
+        Returns:
+            Enhanced BGR image
+        """
+        if not self.enhance_contrast:
+            return frame
+
+        # Convert BGR to LAB
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+
+        # Apply CLAHE to L channel (luminance)
+        lab[:, :, 0] = self._clahe.apply(lab[:, :, 0])
+
+        # Convert back to BGR
+        enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+        return enhanced
 
     def detect(
         self,
@@ -92,12 +137,16 @@ class PlayerDetector:
         Returns:
             List of Detection objects sorted by confidence (highest first)
         """
-        # Run YOLO inference
+        # Apply contrast enhancement
+        enhanced_frame = self.enhance_frame(frame)
+
+        # Run YOLO inference with optimized settings
         results = self.model(
-            frame,
+            enhanced_frame,
             verbose=False,
             conf=self.confidence_threshold,
             iou=self.iou_threshold,
+            imgsz=self.imgsz,
             classes=[self.PERSON_CLASS_ID],  # Only detect people
         )
 
@@ -146,11 +195,15 @@ class PlayerDetector:
         Returns:
             List of detection lists, one per frame
         """
+        # Apply contrast enhancement to all frames
+        enhanced_frames = [self.enhance_frame(f) for f in frames]
+
         results = self.model(
-            frames,
+            enhanced_frames,
             verbose=False,
             conf=self.confidence_threshold,
             iou=self.iou_threshold,
+            imgsz=self.imgsz,
             classes=[self.PERSON_CLASS_ID],
         )
 
@@ -400,6 +453,104 @@ def filter_by_hair_length(
             filtered.append(det)
 
     logger.debug(f"Hair filter: {len(detections)} -> {len(filtered)} detections")
+    return filtered
+
+
+def detect_back_facing(
+    frame: np.ndarray,
+    bbox: BoundingBox,
+    skin_threshold: float = 0.15,
+) -> bool:
+    """
+    Detect if a person has their back facing the camera.
+
+    When camera is behind players (same side of court), players on your team
+    have their backs to the camera (no face visible), while opposing team
+    players are facing the camera (face visible).
+
+    Detection method: Check for skin-tone pixels in the head/face region.
+    - Back facing: minimal skin (just hair/back of head)
+    - Front facing: significant skin (face visible)
+
+    Args:
+        frame: BGR image
+        bbox: Person bounding box
+        skin_threshold: Maximum skin ratio to be considered back-facing.
+                       Default 0.15 = less than 15% skin means back is facing camera.
+
+    Returns:
+        True if back is facing camera, False if front is facing camera
+    """
+    frame_h, frame_w = frame.shape[:2]
+
+    # Head region: top 25% of bbox
+    head_y1 = max(0, bbox.y1)
+    head_y2 = min(frame_h, bbox.y1 + int(bbox.height * 0.25))
+    head_x1 = max(0, bbox.x1)
+    head_x2 = min(frame_w, bbox.x2)
+
+    if head_y2 <= head_y1 or head_x2 <= head_x1:
+        return True  # Can't determine, assume back-facing
+
+    head_region = frame[head_y1:head_y2, head_x1:head_x2]
+    if head_region.size == 0:
+        return True
+
+    # Convert to HSV for skin detection
+    hsv = cv2.cvtColor(head_region, cv2.COLOR_BGR2HSV)
+
+    # Skin tone detection in HSV:
+    # Hue: 0-25 (red-orange-yellow range)
+    # Saturation: 40-170 (not too gray, not too saturated)
+    # Value: 80-255 (not too dark)
+    lower_skin = np.array([0, 40, 80], dtype=np.uint8)
+    upper_skin = np.array([25, 170, 255], dtype=np.uint8)
+
+    skin_mask = cv2.inRange(hsv, lower_skin, upper_skin)
+    skin_ratio = np.mean(skin_mask > 0)
+
+    # If skin ratio is low, person is back-facing (no face visible)
+    is_back_facing = skin_ratio < skin_threshold
+
+    logger.debug(f"Back-facing detection: skin_ratio={skin_ratio:.2f}, back_facing={is_back_facing}")
+
+    return is_back_facing
+
+
+def filter_by_back_facing(
+    detections: List[Detection],
+    frame: np.ndarray,
+    skin_threshold: float = 0.15,
+    keep_back_facing: bool = True,
+) -> List[Detection]:
+    """
+    Filter detections based on whether player's back is facing the camera.
+
+    Use this when camera is positioned behind players (same side of court).
+    Players on your team have backs to camera, opposing team faces camera.
+
+    Args:
+        detections: List of person detections
+        frame: Current video frame (BGR)
+        skin_threshold: Skin ratio threshold for back-facing detection.
+                       Lower = stricter (fewer kept). Default 0.15.
+        keep_back_facing: If True, keep players with back to camera (your team).
+                         If False, keep players facing camera (opposing team).
+
+    Returns:
+        Filtered detections
+    """
+    filtered = []
+
+    for det in detections:
+        is_back = detect_back_facing(frame, det.bbox, skin_threshold)
+
+        if keep_back_facing and is_back:
+            filtered.append(det)
+        elif not keep_back_facing and not is_back:
+            filtered.append(det)
+
+    logger.debug(f"Back-facing filter: {len(detections)} -> {len(filtered)} detections")
     return filtered
 
 

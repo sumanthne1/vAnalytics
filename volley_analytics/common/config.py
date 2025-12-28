@@ -36,12 +36,22 @@ class StabilizationConfig(BaseModel):
 
 class DetectionConfig(BaseModel):
     """Player detection configuration."""
-    model_name: str = "yolov8n.pt"  # yolov8n, yolov8s, yolov8m
-    confidence_threshold: float = Field(default=0.4, ge=0.1, le=0.95)  # 0.4 per architecture doc
+    model_name: str = "yolov8x.pt"  # yolov8n, yolov8s, yolov8m, yolov8l, yolov8x
+    confidence_threshold: float = Field(default=0.35, ge=0.1, le=0.95)  # Lowered for better recall
     iou_threshold: float = Field(default=0.45, ge=0.1, le=0.9)
     device: str = "auto"  # auto, cpu, cuda, mps
     max_detections: int = Field(default=20, ge=1, le=100)
-    # Size filtering
+    # Input resolution for YOLO (higher = better for small/distant players)
+    imgsz: int = Field(default=1280, ge=320, le=1920)
+    # Contrast enhancement (CLAHE) for better detection in shadows/poor lighting
+    enhance_contrast: bool = True
+    clahe_clip_limit: float = Field(default=2.0, ge=1.0, le=4.0)
+    clahe_grid_size: int = Field(default=8, ge=4, le=16)
+    # Basic filters (can be disabled)
+    filter_by_size: bool = False  # Size filter (default: OFF)
+    filter_by_position: bool = False  # Position/edge filter (default: OFF)
+    filter_by_sitting: bool = False  # Sitting people filter (default: OFF)
+    # Size filtering params (used if filter_by_size=True)
     min_area: int = Field(default=1000, ge=100, le=50000)  # Min bbox area in pixels²
     max_area_ratio: float = Field(default=0.5, ge=0.1, le=0.9)  # Max area as ratio of frame
     min_height_ratio: float = Field(default=0.05, ge=0.01, le=0.3)  # Min height as ratio of frame
@@ -50,10 +60,13 @@ class DetectionConfig(BaseModel):
     max_aspect_ratio: float = Field(default=2.0, ge=0.5, le=5.0)  # Max width/height (allow crouched)
     edge_margin: float = Field(default=0.05, ge=0.0, le=0.2)  # 5% edge margin per doc
     # Hair length filtering (PRIMARY filter for women's volleyball)
-    filter_by_hair: bool = True  # Keep only players with long hair (default: ON)
+    filter_by_hair: bool = False  # Keep only players with long hair (default: OFF)
     hair_min_ratio: float = Field(default=0.25, ge=0.1, le=0.5)  # Hair detection threshold
+    # Back-facing filter (camera behind players, same side of court)
+    filter_by_back_facing: bool = False  # Keep only players with back to camera (default: OFF)
+    back_facing_skin_threshold: float = Field(default=0.15, ge=0.05, le=0.4)  # Max skin ratio for back-facing
     # Uniform color filtering (to keep only one team)
-    filter_by_uniform: bool = True  # Enable uniform color filtering (default: ON)
+    filter_by_uniform: bool = False  # Enable uniform color filtering (default: OFF)
     uniform_color_hsv: Optional[Tuple[float, float, float]] = None  # Target uniform HSV color
     auto_learn_uniform: bool = True  # Auto-learn uniform from first N frames
     uniform_hue_tolerance: float = Field(default=40.0, ge=10.0, le=90.0)  # Hue tolerance

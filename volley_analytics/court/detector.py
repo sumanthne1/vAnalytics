@@ -658,6 +658,35 @@ def detect_court_in_frame(frame: np.ndarray) -> CourtInfo:
     return detector.detect(frame)
 
 
+def detect_court_mask(frame: np.ndarray, margin: float = 0.05) -> np.ndarray:
+    """
+    Convenience function to get court ROI mask for player detection.
+
+    Use this mask with PlayerDetector to filter out spectators/bench areas.
+
+    Args:
+        frame: BGR image
+        margin: Extra margin around detected court (0.05 = 5%)
+
+    Returns:
+        Binary mask (255 = inside court, 0 = outside)
+        If detection fails, returns a mask covering 80% of frame center.
+    """
+    detector = CourtDetector()
+    court_info = detector.detect(frame)
+
+    if court_info.mask is not None:
+        return court_info.mask
+
+    # Fallback: return center 80% of frame as court area
+    h, w = frame.shape[:2]
+    mask = np.zeros((h, w), dtype=np.uint8)
+    margin_x = int(w * 0.1)
+    margin_y = int(h * 0.1)
+    mask[margin_y:h-margin_y, margin_x:w-margin_x] = 255
+    return mask
+
+
 def draw_court_overlay(
     frame: np.ndarray,
     court_info: CourtInfo,

@@ -6,6 +6,7 @@ from .detector import (
     CourtLine,
     LineType,
     detect_court_in_frame,
+    detect_court_mask,
     draw_court_overlay,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "CourtLine",
     "LineType",
     "detect_court_in_frame",
+    "detect_court_mask",
     "draw_court_overlay",
 ]

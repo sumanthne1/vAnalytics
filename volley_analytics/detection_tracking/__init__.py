@@ -1,4 +1,4 @@
-"""Detection and tracking module for player tracking."""
+"""Detection module for player detection."""
 
 from .detector import (
     PlayerDetector,
@@ -7,17 +7,12 @@ from .detector import (
     filter_out_sitting_people,
     filter_by_hair_length,
     detect_long_hair,
+    filter_by_back_facing,
+    detect_back_facing,
     filter_by_uniform_color,
     learn_uniform_color,
     extract_torso_color,
     color_similarity_hsv,
-)
-from .bytetrack import ByteTracker, Track, TrackState, compute_iou
-from .tracker import (
-    PlayerTracker,
-    TrackingResult,
-    draw_tracks,
-    draw_tracking_stats,
 )
 
 __all__ = [
@@ -28,18 +23,10 @@ __all__ = [
     "filter_out_sitting_people",
     "filter_by_hair_length",
     "detect_long_hair",
+    "filter_by_back_facing",
+    "detect_back_facing",
     "filter_by_uniform_color",
     "learn_uniform_color",
     "extract_torso_color",
     "color_similarity_hsv",
-    # ByteTrack
-    "ByteTracker",
-    "Track",
-    "TrackState",
-    "compute_iou",
-    # Tracker
-    "PlayerTracker",
-    "TrackingResult",
-    "draw_tracks",
-    "draw_tracking_stats",
 ]

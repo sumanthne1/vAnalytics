@@ -1,9 +1,0 @@
-Volleyball Analytics Pipeline: Issues and Improvements
-
-- Stabilization is unused: pipeline processes raw frames directly (see volley_analytics/pipeline/pipeline.py). Add VideoStabilizer output as the frame passed to detection/tracking to reduce jitter and ID switches.
-- Hardcoded 2-player merge: pipeline merges tracks to max_players=2 post-process, which collapses real matches. Use tracking.max_players (default 12) or a per-video value instead.
-- Detection filters lenient/misaligned: detector filters use ~2% edge margin, aspect <=1.0, no min/max area. Align with the documented rules (edge ≥5%, min area ~1000 px², max area 50% frame, aspect 0.2–2.0, border trimming) to cut false positives and edge ghosts.
-- ROI check is center-only: court ROI uses only bbox center; half-outside players/spectators pass. Require feet-inside-court or minimum mask coverage for stronger filtering.
-- Config defaults mismatched: default detection confidence is 0.5 and filters aren’t wired to config; docs use 0.4 with size/edge rules. Expose these thresholds in config to avoid regressions across videos.
-- Segment extractor fps mismatch: it is created with hardcoded fps=30 before reading actual FPS, so min-duration is wrong for 24/60fps clips. Recreate it with real FPS from video metadata.
-- Missing HTML report: outputs include JSONs but no report.html; wire visualization/report generator if you want parity with the documented outputs.

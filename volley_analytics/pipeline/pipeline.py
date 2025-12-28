@@ -39,11 +39,11 @@ from ..common import (
     Visibility,
     VisionQuality,
 )
-from ..detection_tracking import PlayerDetector, PlayerTracker
+from ..detection_tracking import PlayerDetector
+# NOTE: Human-in-loop workflow moved to run_pipeline.py with OSNet ReID
 from ..human_in_loop import (
-    collect_bootstrap_frames,
+    collect_bootstrap_frames_reid,
     review_and_confirm_tracks,
-    review_and_confirm_tracks_web,
 )
 from ..pose import PoseEstimator
 from ..segments import SegmentExtractor, merge_segments_by_track, get_player_summary
@@ -159,7 +159,7 @@ class Pipeline:
         # Initialize components (lazy loading)
         self._stabilizer: Optional[VideoStabilizer] = None
         self._detector: Optional[PlayerDetector] = None
-        self._tracker: Optional[PlayerTracker] = None
+        self._tracker = None  # PlayerTracker removed - use run_pipeline.py instead
         self._pose_estimator: Optional[PoseEstimator] = None
         self._action_classifier: Optional[ActionClassifier] = None
         self._segment_extractor: Optional[SegmentExtractor] = None
@@ -210,17 +210,11 @@ class Pipeline:
         return self._detector
 
     @property
-    def tracker(self) -> PlayerTracker:
-        if self._tracker is None:
-            self._tracker = PlayerTracker(
-                detection_model=self.config.detection.model_name,
-                detection_confidence=self.config.detection.confidence_threshold,
-                max_players=self.config.tracking.max_players,
-                track_buffer=self.config.tracking.track_buffer,
-                track_thresh=self.config.tracking.track_thresh,
-                match_thresh=self.config.tracking.match_thresh,
-            )
-        return self._tracker
+    def tracker(self):
+        """DEPRECATED: PlayerTracker has been removed. Use run_pipeline.py with OSNet ReID instead."""
+        raise NotImplementedError(
+            "PlayerTracker has been removed. Use run_pipeline.py with OSNet ReID pipeline instead."
+        )
 
     @property
     def pose_estimator(self) -> PoseEstimator:
@@ -531,26 +525,11 @@ class Pipeline:
         # Store for use during tracking
         self._uniform_color_hsv = uniform_color_hsv
 
-        # Get ByteTracker from PlayerTracker for bootstrap collection
-        from ..detection_tracking.bytetrack import ByteTracker
-        bootstrap_tracker = ByteTracker()
-
-        # Calculate stride to evenly distribute frames across entire video
-        # Example: 10 frames from 3000-frame video = stride of 300 (1 frame every 10 seconds at 30fps)
-        num_bootstrap = self.config.human_review.num_bootstrap_frames
-        stride = max(1, total_frames // num_bootstrap)
-        self.logger.info(
-            f"Bootstrap sampling: {num_bootstrap} frames, stride={stride} "
-            f"(1 frame every {stride/fps:.1f}s across {total_frames/fps:.0f}s video)"
-        )
-
-        bootstrap_frames = collect_bootstrap_frames(
-            video_path=str(video_path),
-            detector=self.detector,
-            tracker=bootstrap_tracker,
-            court_mask=None,
-            num_frames=num_bootstrap,
-            stride=stride,
+        # DEPRECATED: This pipeline code is deprecated in favor of run_pipeline.py
+        # which uses OSNet ReID for robust player tracking.
+        raise NotImplementedError(
+            "This Pipeline class is deprecated. Use run_pipeline.py or "
+            "run_single_player_pipeline.py for the updated ReID-based workflow."
         )
 
         # =====================================================================
@@ -578,7 +557,31 @@ class Pipeline:
             self.logger.info(f"Hair filter: {total_before} -> {total_after} detections")
 
         # =====================================================================
-        # FILTER 2: Uniform color - keep only matching team jerseys
+        # FILTER 2: Back-facing - keep players with back to camera (your team)
+        # =====================================================================
+        if self.config.detection.filter_by_back_facing:
+            self.logger.info("Applying back-facing filter (keeping players with back to camera)...")
+            from ..detection_tracking.detector import detect_back_facing
+            filtered_bootstrap = []
+            total_before = 0
+            total_after = 0
+            for orig_frame, tracks in bootstrap_frames:
+                total_before += len(tracks)
+                filtered_tracks = []
+                for track in tracks:
+                    if detect_back_facing(
+                        orig_frame,
+                        track.bbox,
+                        skin_threshold=self.config.detection.back_facing_skin_threshold,
+                    ):
+                        filtered_tracks.append(track)
+                total_after += len(filtered_tracks)
+                filtered_bootstrap.append((orig_frame, filtered_tracks))
+            bootstrap_frames = filtered_bootstrap
+            self.logger.info(f"Back-facing filter: {total_before} -> {total_after} detections")
+
+        # =====================================================================
+        # FILTER 3: Uniform color - keep only matching team jerseys
         # =====================================================================
         if uniform_color_hsv is not None:
             self.logger.info("Applying uniform color filter...")
@@ -622,9 +625,9 @@ class Pipeline:
         self.logger.info("=" * 60)
 
         if self.config.human_review.ui_type == "web":
-            self.logger.info("Launching web UI for player tagging...")
-            confirmed_ids, confirmed_labels = review_and_confirm_tracks_web(
-                bootstrap_frames,
+            raise NotImplementedError(
+                "Web UI removed. Use run_pipeline.py with OSNet ReID pipeline instead, "
+                "or set ui_type to 'opencv'."
             )
         else:
             self.logger.info("Launching OpenCV UI for player tagging...")
